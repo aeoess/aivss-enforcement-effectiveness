@@ -1,0 +1,10 @@
+aivss-enforcement-effectiveness
+Copyright 2026 Tymofii Pidlisnyi (AEOESS) and contributors.
+
+Working text for the OWASP AIVSS `enforcement_effectiveness` dimension family.
+Co-authored with @VeloGerber (AiEGIS) per the cadence agreement on
+OWASP/www-project-artificial-intelligence-vulnerability-scoring-system#31.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this file except in compliance with the License. You may obtain a copy
+of the License at https://www.apache.org/licenses/LICENSE-2.0.
