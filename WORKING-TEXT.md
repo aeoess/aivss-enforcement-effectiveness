@@ -64,7 +64,7 @@ The window N and the time period T are both required parameters of any cited rat
 
 **Tier definitions.**
 
-- **high**: P99 < min(typical-user-action), with ≈200ms as the payments and agent-toolkit floor
+- **high**: P99 < min(typical-user-action), with 200ms as a hard floor for payments and agent-toolkit rails. Other rails pin via the rail's P50 typical-user-action interval rounded down to the nearest 50ms
 - **medium**: P99 < typical-task-batch-end, ≈5s
 - **low**: P99 ≥ task-batch-end OR no empirical methodology cited
 - **unknown**: vendor self-claim without methodology
@@ -100,11 +100,13 @@ Each tier in each dimension requires both a receipt and a methodology citation. 
 | Dimension | high | medium | low | unknown |
 |---|---|---|---|---|
 | Structural enforcement | cryptographic gate at the action boundary, signed assertion published | (binary axis: no medium tier) | asserted-only, signed admission published | no signed assertion either way |
-| Empirical block-rate | block_rate ≥ 0.95 over window N, signed events, methodology citation | block_rate ≥ 0.80, signed events, methodology citation | block_rate < 0.80 OR signed events without methodology citation | no signed event log |
-| Time-to-enforce | P99 < min(typical-user-action), reproducing across two independent substrates, signed run logs | P99 < typical-task-batch-end (~5s), signed run logs | P99 ≥ task-batch-end OR no empirical methodology cited | vendor self-claim without methodology |
+| Empirical block-rate | block_rate ≥ 0.95 over window N, signed events, methodology citation | block_rate ≥ 0.80, signed events, methodology citation | block_rate < 0.80 with methodology citation | no signed event log OR signed events without methodology citation |
+| Time-to-enforce | P99 < min(typical-user-action), reproducing across two independent substrates, signed run logs | P99 < typical-task-batch-end (~5s), single-substrate measurement acceptable, signed run logs | P99 ≥ task-batch-end OR no empirical methodology cited | vendor self-claim without methodology |
 | Enforcement locus | `customer` with §5.3 preconditions verified, OR `vendor` with audit-trail-right contract published, OR `hybrid` with per-class declaration | (enum axis: no medium tier in the rubric sense; the hybrid value lands here when partial preconditions are verified) | enum value present in receipts, no precondition verification | `enforcement_locus` value not present in receipts |
 
 The structural-enforcement and enforcement-locus rows are not continuous. The tier label captures the verification evidence the vendor has published. For empirical block-rate and time-to-enforce, the rate or the percentile is the measurement; the tier captures both the value and the methodology behind it.
+
+Substrate count is the discriminator between HIGH (≥2 independent substrates) and MEDIUM (single-substrate) on the time-to-enforce row. Headline-number magnitude alone does not promote MEDIUM to HIGH.
 
 ### 2.2 Core requirement, in one sentence
 
@@ -133,7 +135,7 @@ Two reference implementations run the same race-test methodology shape and produ
 
 ### 3.1 Methodology shape
 
-4 workers × 500 qps × 3 seconds × 3 runs = 18,000 requests per implementation. Revocation fires at the midpoint of each run (1500ms in). The metric is the time between revocation commit and the last ACCEPT the gate emits for the revoked delegation. The headline numbers reported are P50, P95, P99, and MAX of that distribution across all 18,000 requests.
+Reference shape per run: 4 workers × 500 qps × 3 seconds = ~6,000 requests. Sanity-check shape (used for cross-substrate reproduction): 1 run = ~6,000 requests. Tier-eligibility shape (full reference): 3 runs = ~18,000 requests, with run-to-run variance reported alongside the percentile distribution. Revocation fires at the midpoint of each run (1500ms in). The metric is the time between revocation commit and the last ACCEPT the gate emits for the revoked delegation. Headline numbers reported are P50, P95, P99, and MAX of that distribution across all requests in the chosen shape.
 
 **Run commands.**
 
@@ -142,9 +144,9 @@ Two reference implementations run the same race-test methodology shape and produ
 
 ### 3.2 What this proves
 
-Methodology portability across two independent substrates is the load-bearing claim. The in-process Map substrate (APS race-test runner) and the SQLite WAL multi-process substrate (audit-pack-signing v0.5) are different along every dimension: process model, persistence layer, concurrency primitive, network exposure. The headline numbers reproduce across both: P50/P95/P99/MAX = 0.00ms, zero ACCEPTs after revocation commit, across 18,000 requests per implementation.
+Methodology portability across two independent substrates is the load-bearing claim. The in-process Map substrate (APS race-test runner) and the SQLite WAL multi-process substrate (audit-pack-signing v0.5) are different along every dimension: process model, persistence layer, concurrency primitive, network exposure. The headline numbers reproduce across both within the spec.md §12 bound (≤50ms). Two reference observations to date: audit-pack-signing v0.5 lab-bench at 0.00ms / 0 ACCEPTs over 6,000 requests (1 run, per VeloGerber's #31 May 6 post); APS race-test runner fresh-checkout at P99 4.57ms / 12 ACCEPTs over 6,004 requests (1 run, per PR#1 reproduction comment). Both observations satisfy the §12 bound. Absolute headline parity is not the claim; bound parity across substrates is.
 
-Numbers reproducing across two substrates means the dimension measures the methodology. The substrate is incidental to the result. A single-substrate result is open to the objection that the headline numbers are an artifact of the chosen backend. Two substrates with identical numbers close that objection.
+Bound reproduction across two substrates means the dimension measures the methodology. The substrate is incidental to the bound. A single-substrate result is open to the objection that the bound is an artifact of the chosen backend. Two substrates satisfying the same bound close that objection.
 
 ### 3.3 Reproduction kit
 
@@ -176,6 +178,8 @@ The four dimensions compose into a single enforcement-effectiveness score. The r
 A composite score with structural-low and any other axes high stays at asserted-only at the composite level. The cryptographic gate is the precondition for any time-to-enforce or block-rate claim being meaningful. An asserted-only gate with high block-rate over a measured window has a coverage claim. Coverage does not promote to enforcement without a structural floor. The next config drift restores the original threat surface, regardless of how high the latency or block-rate numbers were on the day of measurement.
 
 In rubric terms: structural-enforcement = asserted-only collapses the composite score to the asserted-only floor, with no upgrade path until the structural axis crosses to cryptographic-gate.
+
+For hybrid postures, the structural collapse applies per-locus, not globally. A hybrid claim with cryptographic-customer + asserted-only-vendor reports two distinct composite tiers, one per locus.
 
 ### 4.2 Three-axis composition with #32 §3.2 multiplier
 
@@ -223,9 +227,9 @@ The high tier of any `enforcement_locus = customer` claim asserts:
 
 1. **Multi-tenant isolation.** Per-customer process or namespace boundary, with operator-A bearer unable to read operator-B's enforcement state across any vendor-side endpoint that exposes operator data. Verification path: signed configuration attestation OR penetration-test result covering cross-tenant reads on the vendor's registry, anomaly, audit, and metering surfaces.
 
-2. **HMAC rotation discipline.** Webhook-signing or auth secrets rotate on a documented cadence with a two-secret window (PRIMARY and PREVIOUS), accept-either during rollover, validity overlap window published. Verification path: rotation log entries with a signed attestation that the rotation cadence has been honored over the past N rotations.
+2. **HMAC rotation discipline.** Webhook-signing or auth secrets rotate on a documented cadence with a two-secret window (PRIMARY and PREVIOUS), accept-either during rollover, validity overlap window published. Verification path: rotation log entries with a signed attestation that the rotation cadence has been honored over the past N rotations, AND that the published validity-overlap window exceeds the maximum observed delivery latency on the receipt stream.
 
-3. **Service-account allowlist.** Vendor-internal service accounts authorized to write the enforcement decision log are documented and bound to a published IP allowlist (loopback-default with explicit CIDR override, fail-closed on configuration error). Verification path: IAM policy snapshot plus signed attestation covering the service-account roster and the allowlist contents.
+3. **Service-account allowlist.** Vendor-internal service accounts authorized to write the enforcement decision log are documented and bound to a published IP allowlist (loopback-default with explicit CIDR override, fail-closed on configuration error). Verification path: IAM policy snapshot plus signed attestation covering the service-account roster and the allowlist contents. Snapshot timestamp is signed; verification holds for the time window declared in the snapshot. Vendors publishing rolling snapshots provide stronger verification than single-point snapshots.
 
 4. **Per-source-IP rate limiting.** Cap on enforcement-decision write requests per source IP (sliding-window counter, deque-bounded per-IP buckets, periodic GC of empty buckets). Verification path: rate-limiter configuration snapshot plus a sample of receipts from the receipt-stream demonstrating the limit holds under load.
 
