@@ -32,7 +32,7 @@ Each dimension below carries: a definition, the axis type, the receipt a vendor 
 
 **Axis type.** Binary. Cryptographic gate at the action boundary, or asserted-only.
 
-**Multiplier semantics.** Per OWASP AIVSS #32 §3.2: a structurally enforced constraint carries a ×2.0 multiplier on the underlying score. An asserted-only constraint carries ×1.0. The multiplier captures that an asserted-only gate is a probabilistic mitigation. A cryptographic gate is a categorical one.
+**Multiplier semantics.** Per OWASP AIVSS #32 §3.2: a structurally enforced constraint carries a ×2.0 multiplier on the underlying score. An asserted-only constraint carries ×1.0. The multiplier captures that an asserted-only gate is a probabilistic mitigation. A cryptographic gate is a categorical one. The ×2.0 multiplier is scoped to the `enforcement_effectiveness` dimension family. Cross-family multiplier interaction, where this multiplier composes with multipliers from other AIVSS dimension families, is deferred to AIVSS v1.0 and is out of scope for this working text.
 
 **Receipt requirement.** The vendor publishes a signed assertion that the gate is structurally enforced. The assertion identifies the action boundary, the cryptographic primitive in use (signature scheme, delegation envelope shape, scope-verification surface), and the policy under which the gate refuses non-conforming actions. The signature is over the assertion content, signed by a key bound to the vendor's published identity. A reviewer can verify the signature offline against the vendor's published public key.
 
@@ -50,7 +50,7 @@ Each dimension below carries: a definition, the axis type, the receipt a vendor 
 
 The window N and the time period T are both required parameters of any cited rate. A claim of "block-rate 0.94" without N and T is unverifiable.
 
-**Receipt requirement.** Signed events with verifiable timestamps. Each event in the window carries (a) the action under evaluation, (b) the verdict (block or allow), (c) the timestamp, and (d) a signature binding (a) through (c) to the gate's signing key. The rate is reproducible: any third party reading the log can recompute the rate over the same window and arrive at the same number. The gate's signing key is the same key used in §1.1's structural-enforcement assertion.
+**Receipt requirement.** Signed events with verifiable timestamps. Each event in the window carries (a) the action under evaluation, (b) the verdict (block or allow), (c) the timestamp, (d) `constraint_set_sha`, a mandatory field binding the receipt to the exact constraint set the gate enforced for that event, and (e) a signature binding (a) through (d) to the gate's signing key. The rate is reproducible: any third party reading the log can recompute the rate over the same window and arrive at the same number. The gate's signing key is the same key used in §1.1's structural-enforcement assertion.
 
 **Anti-pattern.** A vendor self-reports a block-rate without methodology citation. The number stays at the unknown tier regardless of the value claimed. The dimension distinguishes "the gate caught X% of attempts in a measured window" from "the vendor says the gate works." Without the receipt and the window definition, the second collapses into the first only by the reviewer's good faith.
 
@@ -71,7 +71,7 @@ The window N and the time period T are both required parameters of any cited rat
 
 **Receipt requirement.** Percentile measurement across N runs (4 workers × 500 qps × 3 seconds × 3 runs is the reference shape; vendors free to scale up). Signed run logs covering each individual request. Methodology shape disclosed in machine-readable form: workers, qps, duration, run count, what triggers the policy decision, how the gate measures time-to-enforce. The receipt is reproducible by a third party who runs the same shape against the vendor's published interface.
 
-**Methodology portability.** The high tier requires the same methodology shape to reproduce across at least two independent substrates. A single-substrate measurement leaves it open whether the headline numbers come from the gate's behavior or from the substrate the gate runs on. Two substrates with identical headline numbers establish that the dimension measures the methodology; the substrate drops out of the result. The reference implementations cited in §3 satisfy this requirement.
+**Methodology portability.** The high tier requires the same methodology shape to reproduce across at least two independent substrates. An enforcement-effectiveness claim must hold across substrate swaps: a claim whose headline numbers are tied to one storage backend is a claim about that backend, not a portable claim about the gate. A single-substrate measurement leaves it open whether the headline numbers come from the gate's behavior or from the substrate the gate runs on. Two substrates with identical headline numbers establish that the dimension measures the methodology; the substrate drops out of the result. The reference implementations cited in §3 satisfy this requirement.
 
 ### 1.4 Enforcement locus
 
@@ -135,7 +135,7 @@ Two reference implementations run the same race-test methodology shape and produ
 
 ### 3.1 Methodology shape
 
-Reference shape per run: 4 workers × 500 qps × 3 seconds = ~6,000 requests. Sanity-check shape (used for cross-substrate reproduction): 1 run = ~6,000 requests. Tier-eligibility shape (full reference): 3 runs = ~18,000 requests, with run-to-run variance reported alongside the percentile distribution. Revocation fires at the midpoint of each run (1500ms in). The metric is the time between revocation commit and the last ACCEPT the gate emits for the revoked delegation. Headline numbers reported are P50, P95, P99, and MAX of that distribution across all requests in the chosen shape.
+Reference shape per run: 4 workers × 500 qps × 3 seconds = ~6,000 requests. Sanity-check shape (used for cross-substrate reproduction): 1 run = ~6,000 requests. Tier-eligibility shape (full reference): 3 runs = ~18,000 requests, with run-to-run variance reported alongside the percentile distribution. Revocation fires at the midpoint of each run (1500ms in). The metric is the time between revocation commit and the last ACCEPT the gate emits for the revoked delegation. Revocation commit is the point at which the revocation is durable and verifiable, not the point at which it is requested: a revocation that has been requested but not yet committed has not started the time-to-enforce clock. Headline numbers reported are P50, P95, P99, and MAX of that distribution across all requests in the chosen shape.
 
 **Run commands.**
 
@@ -147,6 +147,8 @@ Reference shape per run: 4 workers × 500 qps × 3 seconds = ~6,000 requests. Sa
 Methodology portability across two independent substrates is the load-bearing claim. The in-process Map substrate (APS race-test runner) and the SQLite WAL multi-process substrate (audit-pack-signing v0.5) are different along every dimension: process model, persistence layer, concurrency primitive, network exposure. The headline numbers reproduce across both within the spec.md §12 bound (≤50ms). Two reference observations to date: audit-pack-signing v0.5 lab-bench at 0.00ms / 0 ACCEPTs over 6,000 requests (1 run, per VeloGerber's #31 May 6 post); APS race-test runner fresh-checkout at P99 4.57ms / 12 ACCEPTs over 6,004 requests (1 run, per PR#1 reproduction comment). Both observations satisfy the §12 bound. Absolute headline parity is not the claim; bound parity across substrates is.
 
 Bound reproduction across two substrates means the dimension measures the methodology. The substrate is incidental to the bound. A single-substrate result is open to the objection that the bound is an artifact of the chosen backend. Two substrates satisfying the same bound close that objection.
+
+Bound parity also constrains evidence delivery. Push delivery (the gate emits the receipt to a stream) and pull delivery (a reviewer fetches the receipt from the gate) must yield byte-equivalent evidence for the same enforced action. A delivery mode that alters the bytes alters the evidence; the canonical receipt for an enforced action is delivery-mode independent.
 
 ### 3.3 Reproduction kit
 
@@ -195,11 +197,15 @@ This configuration looks safer than asserted-only with high latency. The block-r
 
 A v1.0 reviewer assigning the composite tier should treat high-block-rate + low-latency + asserted-only as a partial posture. Lower latency on an asserted-only gate is a refinement at the surface. The structural floor still does not exist. Latency is a refinement only above the structural floor.
 
+**The structural-discoverability quadrant.** The mirror configuration: a gate that is structurally enforced in fact, but whose structural property a reviewer cannot discover from published evidence. The vendor runs a cryptographic gate at the action boundary, but has published no signed structural-enforcement assertion (§1.1), so the structural axis cannot be verified offline. A reviewer scores what is discoverable, not what is privately true: an undiscoverable structural floor lands at the unknown tier per the §2.1 tier table (no signed assertion either way), the same tier as a gate with no floor at all. The false-security quadrant catches a posture that looks structural and is not. The structural-discoverability quadrant catches the opposite posture, one that is structural and cannot be shown to be. The two collapse to the same reviewer-facing outcome; the remedy for the second is a publication step, not an engineering one.
+
 ### 4.4 Enforcement_locus is independent
 
 The 3-axis score is per-locus. A vendor-locus high tier and a customer-locus high tier are different threat-model arithmetic even when the structural, block-rate, and time-to-enforce numbers match. Vendor-locus compounds vendor-side compromise into customer-side outcome. Customer-locus does not, given the §5.3 preconditions hold. The locus value qualifies the composite tier. It does not rank one posture above another.
 
 Concretely: a vendor publishing `enforcement_locus = customer` with high tier on the other three axes carries a residual risk profile that depends on the §5.3 precondition set holding. A vendor publishing `enforcement_locus = vendor` with the same headline numbers carries a residual risk profile that depends on the customer's audit-trail right being honored end-to-end. Neither posture is universally superior; both are panel-ready when the receipts and preconditions are verifiable.
+
+**Worked example (residual risk after enforcement).** The numbers below are illustrative, not asserted as measured. A vendor publishes a full high-tier posture: structural-enforcement = cryptographic-gate (×2.0); empirical block-rate = 0.97 over a signed 30-day window; time-to-enforce P99 = 180ms reproduced across two substrates; `enforcement_locus = vendor` with an audit-trail-right contract published. Every axis is at the high tier. The residual risk is what the enforcement does not remove: the ~0.03 of non-conforming actions outside the measured block-rate; the actions that can be admitted inside the 180ms window before a freshly committed revocation closes it; and the vendor-locus compounding, where a compromise of the gate signing key turns every subsequent receipt into an attacker-controlled artifact until the incident-disclosure contract fires. A high-tier composite is the floor of residual risk under this rubric, not its elimination. A v1.0 reviewer reads the residual-risk profile alongside the tier, because two vendors at identical tiers can carry materially different residual risk depending on locus and measurement window.
 
 ---
 
@@ -239,23 +245,68 @@ These preconditions surfaced through OWASP AIVSS #31 as the verification-path fr
 
 ### 5.4 Preconditions for `enforcement_locus = vendor` claims
 
-(TBD v0.1 follow-up: parallel preconditions for vendor-side enforcement, focused on the customer's audit-trail right. Likely shape: customer-verifiable signing key, customer-readable audit log with bounded staleness, published incident-disclosure contract.)
+A vendor claiming `enforcement_locus = vendor` accepts that vendor-side compromise propagates to customer-side outcome (§5.2). The protective surface is the customer's audit-trail right. These preconditions are parallel to §5.3: where the customer-locus set protects the isolation of customer-side enforcement state, the vendor-locus set protects the customer's ability to verify vendor-side enforcement after the fact.
+
+The high tier of any `enforcement_locus = vendor` claim asserts:
+
+1. **Customer-verifiable signing key.** The gate's signing key is published so that the customer can verify, offline, that each decision receipt was signed by the gate and not by another vendor-side process. Verification path: a public key bound to the vendor's published identity, plus a signed key-provenance attestation identifying which gate process holds the corresponding private key.
+
+2. **Customer-readable audit log with bounded staleness.** The customer can read the enforcement decision log, and the maximum staleness between an enforced action and that action appearing in the customer-readable log is published as a bound. Audit-log delivery may be push (the gate streams receipts to the customer) or pull (the customer fetches receipts from the gate); both delivery modes must yield byte-equivalent evidence for the same enforced action (§3.2), and both are bound by the same published staleness figure. Verification path: a sample of receipts retrieved under each available delivery mode, compared byte-for-byte, plus a signed attestation that the staleness bound has held over the past measurement window.
+
+3. **Published incident-disclosure contract.** The vendor publishes the obligations it incurs when gate behavior deviates from the published policy: what is disclosed, to whom, and within what time bound. Verification path: the disclosure contract as a published artifact, plus a signed attestation that the contract has been honored for any deviations within the past measurement window.
+
+Reviewers verify the precondition set against the vendor's published artifacts. The locus value is not honored on trust.
 
 ### 5.5 Preconditions for `enforcement_locus = hybrid` claims
 
-(TBD v0.1 follow-up: each enforcement class declares its locus and inherits the corresponding precondition set. Composite tier is the minimum across classes.)
+A `enforcement_locus = hybrid` claim splits enforcement across the customer and vendor boundaries (§5.2). Each enforcement class in a hybrid posture declares its locus and inherits the corresponding precondition set: a customer-locus class inherits §5.3, a vendor-locus class inherits §5.4. The hybrid claim's composite tier is the minimum across all classes; a hybrid posture with one customer-locus class at the high tier and one vendor-locus class at the low tier composites at the low-tier value across the hybrid claim.
+
+In addition to the inherited precondition sets, a hybrid claim asserts:
+
+1. **Locus-transition consistency record.** A record proving that the locus of each enforcement class did not silently change between the moment the claim was made and the moment a reviewer verifies it. A class declared customer-locus at claim time must still be customer-locus at verification time, or the transition must itself be recorded and signed. Verification path: a signed locus-declaration manifest carrying a timestamp, plus a signed transition log (or a signed attestation of no transition) covering the interval between claim and verification.
+
+The locus-transition consistency record exists because a hybrid posture carries a degree of freedom the single-locus postures do not: the split itself. A split that moves silently moves the threat model with it, and a tier verified against the old split no longer describes the deployed system.
 
 ---
 
 ## 6. Receipt shapes
 
-(TBD v0.1 follow-up: canonical receipt shape for each tier in each dimension. Reviewers verify a vendor's claim by validating the receipt shape, the signature, and the methodology citation.)
+This section gives the canonical structural skeleton of a decision receipt. It is a shape, not a new normative position: every requirement it names is already stated in §1 and §2. Collecting the shape in one place lets a reviewer validate a vendor claim mechanically.
+
+### 6.1 Canonical receipt fields
+
+- `dimension`: which of the four family dimensions the receipt supports (`structural_enforcement`, `empirical_block_rate`, `time_to_enforce`, `enforcement_locus`). Binds the receipt to one axis; a tier claim that spans multiple dimensions carries one receipt per dimension.
+- `tier`: the claimed tier for that dimension (`high`, `medium`, `low`, `unknown`). Binds the claim the vendor is making.
+- `value`: the underlying measurement, where the dimension has one (the block-rate fraction for §1.2, the percentile distribution for §1.3). For the binary axis (§1.1) and the enum axis (§1.4) the value is the axis state. Binds the number or state behind the tier.
+- `methodology_citation`: a reference to the methodology that produced `value`, with the parameters required to reproduce it (for block-rate, window N and period T; for time-to-enforce, the run shape and what triggers the policy decision). Binds the tier to a reproducible procedure; a receipt without this field stays at the unknown tier per §2.2.
+- `evidence_set`: the signed artifacts the receipt rests on (signed event logs, signed run logs, configuration attestations, rotation logs). Binds the claim to verifiable data rather than to the vendor's assertion.
+- `signature`: a signature over the preceding fields, by a key bound to the vendor's published identity and verifiable offline. Binds the whole receipt to the vendor and makes tampering detectable.
+
+### 6.2 Receipt precondition
+
+A signed JSON published-scheme artifact must be published alongside the signing key. The scheme artifact defines the receipt shape concretely enough that a verifier can validate the shape of any receipt offline, without contacting the vendor. A signing key published without an accompanying scheme artifact lets a verifier check the signature but not the shape; both are required for an offline-verifiable receipt.
+
+### 6.3 Verification procedure
+
+Reviewers verify a vendor claim by validating the receipt shape against the published scheme artifact, verifying the signature against the published key, and checking the methodology citation. A receipt that fails any of the three is not a verified claim.
+
+TODO(tima-review): §1.4 requires the `enforcement_locus` value to appear in every decision receipt the gate produces; the canonical six-field shape in §6.1 does not list it. Reconcile: is `enforcement_locus` a seventh canonical field, or receipt metadata carried outside the dimension-specific shape?
 
 ---
 
 ## 7. Cross-implementation methodology
 
-(TBD v0.1 follow-up: protocol for adding a third or fourth implementation. The `RevocationStorage` interface in the APS SDK and the SQLite WAL store in audit-pack-signing v0.5 are the two reference backends. Any third-substrate implementation must conform to a documented adapter shape and produce a results table with the same headline columns.)
+This section gives the protocol for adding a third or fourth reference implementation to the portability evidence in §3.
+
+**Reference backends.** Two reference backends anchor the methodology: the `RevocationStorage` interface in the APS SDK (in-process Map substrate) and the SQLite WAL store in audit-pack-signing v0.5 (multi-process substrate). These are the substrates §3 already cites as portability evidence.
+
+**Adapter shape.** Any third-substrate implementation must conform to a documented adapter shape: it provides a `RevocationStorage`-equivalent adapter so that the §3.1 race-test methodology shape (4 workers × 500 qps × 3 seconds per run; revocation at run midpoint; metric is the interval from revocation commit to last ACCEPT) runs against it unmodified. The adapter is the seam; the methodology above the seam does not change per substrate.
+
+**Results table.** A third-substrate implementation must produce a results table with the same headline columns as the §3 reference implementations: P50, P95, P99, and MAX of the revocation-commit-to-last-ACCEPT distribution, alongside the ACCEPT count and request count for the run shape used. Identical headline columns are what make the cross-substrate comparison a comparison rather than two unrelated measurements.
+
+**Bound, not absolute parity.** A third substrate satisfies the portability claim by landing inside the spec.md §12 bound (≤50ms), per §3.2. Absolute headline parity across substrates is not required and not expected; bound parity is the claim.
+
+**Intended v0.2 third substrate.** Nobulex is the intended third substrate for v0.2, per the [#31 substrate-ordering recommendation](https://github.com/OWASP/www-project-artificial-intelligence-vulnerability-scoring-system/issues/31). This is future work; v0.1 does not claim a third-substrate reproduction, and no Nobulex result should be read into this document until it is published.
 
 ---
 
