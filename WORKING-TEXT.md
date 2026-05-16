@@ -85,7 +85,7 @@ The window N and the time period T are both required parameters of any cited rat
 - `vendor`: the enforcement boundary lives in the vendor's infrastructure. The customer sends inputs to the vendor and trusts the vendor's gate to refuse non-conforming actions. The customer's audit trail right is the load-bearing protection. A high-tier vendor claim must publish a receipt that the customer can verify offline against the vendor's published key.
 - `hybrid`: the gate is split. Some enforcement classes run at the customer boundary, others at the vendor boundary. The split is itself a documented contract that names which classes run where.
 
-**Receipt requirement.** The `enforcement_locus` value appears in every decision receipt the gate produces. For `enforcement_locus = customer` claims, the precondition set in §5.3 must be verifiable against published artifacts (signed configuration attestations, rotation logs, IAM policy snapshots, rate-limiter configurations).
+**Receipt requirement.** The `enforcement_locus` value is a canonical receipt field (§6.1), present on every decision receipt the gate produces and not only on the `enforcement_locus`-dimension receipt. For `enforcement_locus = customer` claims, the precondition set in §5.3 must be verifiable against published artifacts (signed configuration attestations, rotation logs, IAM policy snapshots, rate-limiter configurations).
 
 **Why this is its own dimension and not inside the others.** A vendor-trust dependency has different threat-model arithmetic than the gate's cryptographic strength or its block-rate. A vendor-locus high-tier claim and a customer-locus high-tier claim with identical block-rate and time-to-enforce numbers carry different residual risk: the vendor-locus posture compounds vendor-side compromise into customer-side outcome; the customer-locus posture does not, given the §5.3 preconditions hold.
 
@@ -280,6 +280,7 @@ This section gives the canonical structural skeleton of a decision receipt. It i
 - `value`: the underlying measurement, where the dimension has one (the block-rate fraction for §1.2, the percentile distribution for §1.3). For the binary axis (§1.1) and the enum axis (§1.4) the value is the axis state. Binds the number or state behind the tier.
 - `methodology_citation`: a reference to the methodology that produced `value`, with the parameters required to reproduce it (for block-rate, window N and period T; for time-to-enforce, the run shape and what triggers the policy decision). Binds the tier to a reproducible procedure; a receipt without this field stays at the unknown tier per §2.2.
 - `evidence_set`: the signed artifacts the receipt rests on (signed event logs, signed run logs, configuration attestations, rotation logs). Binds the claim to verifiable data rather than to the vendor's assertion.
+- `enforcement_locus`: the locus enum value (`customer`, `vendor`, or `hybrid`) the gate operated under when it produced this receipt. Present on every receipt regardless of which dimension the receipt scores, so the §4.4 locus qualifier is readable on any axis and not only on the locus-dimension receipt. For the receipt whose `dimension` is `enforcement_locus`, this field and the `dimension`/`value` pair carry the same locus value. Binds every claim to the boundary it was enforced at.
 - `signature`: a signature over the preceding fields, by a key bound to the vendor's published identity and verifiable offline. Binds the whole receipt to the vendor and makes tampering detectable.
 
 ### 6.2 Receipt precondition
@@ -289,8 +290,6 @@ A signed JSON published-scheme artifact must be published alongside the signing 
 ### 6.3 Verification procedure
 
 Reviewers verify a vendor claim by validating the receipt shape against the published scheme artifact, verifying the signature against the published key, and checking the methodology citation. A receipt that fails any of the three is not a verified claim.
-
-TODO(tima-review): §1.4 requires the `enforcement_locus` value to appear in every decision receipt the gate produces; the canonical six-field shape in §6.1 does not list it. Reconcile: is `enforcement_locus` a seventh canonical field, or receipt metadata carried outside the dimension-specific shape?
 
 ---
 
@@ -313,7 +312,7 @@ This section gives the protocol for adding a third or fourth reference implement
 ## Open questions for v0.1 review
 
 1. Do we want the receipt shape to be canonicalized via JCS (RFC 8785), or do we leave canonicalization scheme as a per-implementation choice?
-2. Is the structural-axis multiplier always ×2.0, or does the AIVSS v1.0 rubric allow it to vary per-dimension-family?
+2. §1.1's multiplier-scoping clause fixes the ×2.0 structural-axis multiplier to the enforcement-effectiveness family and defers cross-family interaction to v1.0. Still open for v1.0 rubric authors: should the multiplier vary per-dimension-family rather than stay fixed at ×2.0?
 3. For `enforcement_locus = hybrid`, is there a required minimum precondition coverage, or is the per-class declaration sufficient?
 4. The empirical block-rate tier thresholds in §2.1 (high ≥ 0.95, medium ≥ 0.80) are placeholder values. Confirm with #32 RMF authors before v0.2.
 
