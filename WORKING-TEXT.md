@@ -71,7 +71,9 @@ The window N and the time period T are both required parameters of any cited rat
 
 **Receipt requirement.** Percentile measurement across N runs (4 workers × 500 qps × 3 seconds × 3 runs is the reference shape; vendors free to scale up). Signed run logs covering each individual request. Methodology shape disclosed in machine-readable form: workers, qps, duration, run count, what triggers the policy decision, how the gate measures time-to-enforce. The receipt is reproducible by a third party who runs the same shape against the vendor's published interface.
 
-**Methodology portability.** The high tier requires the same methodology shape to reproduce across at least two independent substrates. An enforcement-effectiveness claim must hold across substrate swaps: a claim whose headline numbers are tied to one storage backend is a claim about that backend, not a portable claim about the gate. A single-substrate measurement leaves it open whether the headline numbers come from the gate's behavior or from the substrate the gate runs on. Two substrates with identical headline numbers establish that the dimension measures the methodology; the substrate drops out of the result. The reference implementations cited in §3 satisfy this requirement.
+**Sanity-check vs tier-eligibility shape.** The 3-run shape (≈18,000 requests, with run-to-run variance reported) is the tier-eligibility measurement: a high-tier time-to-enforce claim is established against it. The 1-run shape (≈6,000 requests), defined in §3.1, is a sanity-check that confirms the security window reproduces inside the bound on a second substrate. A single sanity-check run is cross-substrate bound evidence, not a tier-eligibility measurement, and does not on its own establish a vendor's tier.
+
+**Methodology portability.** The high tier requires the same methodology shape to reproduce across at least two independent substrates. An enforcement-effectiveness claim must hold across substrate swaps: a claim whose headline numbers are tied to one storage backend is a claim about that backend, not a portable claim about the gate. A single-substrate measurement leaves it open whether the headline numbers come from the gate's behavior or from the substrate the gate runs on. Two substrates whose security windows land inside the same §12 bound (≤50ms) establish that the dimension measures the methodology rather than the backend; the substrate drops out of the bound. This is bound parity, not headline parity, per §3.2. The reference implementations cited in §3 satisfy this requirement.
 
 ### 1.4 Enforcement locus
 
@@ -126,7 +128,7 @@ The tier difference between the two cases comes from the methodology citation an
 
 ## 3. Reference implementations as portability evidence
 
-Two reference implementations run the same race-test methodology shape and produce identical headline numbers across independent substrates:
+Two reference implementations run the same race-test methodology shape and land the security window inside the same §12 bound across independent substrates:
 
 | Implementation | Substrate | Backend | Source |
 |---|---|---|---|
