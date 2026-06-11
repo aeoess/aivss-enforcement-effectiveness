@@ -1,6 +1,6 @@
 # `enforcement_effectiveness` dimension family, working text v0.2-draft
 
-> **v0.2-draft (2026-06-10):** substrate-resolution floor rule adopted (`floor = max(50ms, k × r)`); nobulex third-substrate reproduction published and read into §3.2; sanity-check vs tier-eligibility note landed earlier (23b99bf). Remaining for the v0.2 cut: §2.1 block-rate threshold confirmation (requested from the #32 RMF authors on OWASP AIVSS #32) and a coarse-clock or multi-process substrate where the substrate term actually binds.
+> **v0.2-draft (2026-06-11):** §2.1 block-rate banding moved to rail-anchored headroom per the #32 RMF review (`Δ_high = +0.15`, `Δ_medium = +0.05` above `rail_baseline_block_rate`; dimensioning open pending working-group input); `rail` added as a canonical receipt field in §6.1; rail-baseline catalogue scoped as a parallel artifact in §2.1.1. Earlier in the cut: substrate-resolution floor rule adopted (`floor = max(50ms, k × r)`); nobulex third-substrate reproduction published and read into §3.2; sanity-check vs tier-eligibility note (23b99bf). Remaining: Δ-dimensioning confirmation from the working group, and a coarse-clock or multi-process substrate where the substrate term actually binds.
 
 **Status:** v0.1 draft. Target publish 2026-05-15 per the [OWASP AIVSS #31](https://github.com/OWASP/www-project-artificial-intelligence-vulnerability-scoring-system/issues/31) cadence agreement.
 
@@ -104,13 +104,19 @@ Each tier in each dimension requires both a receipt and a methodology citation. 
 | Dimension | high | medium | low | unknown |
 |---|---|---|---|---|
 | Structural enforcement | cryptographic gate at the action boundary, signed assertion published | (binary axis: no medium tier) | asserted-only, signed admission published | no signed assertion either way |
-| Empirical block-rate | block_rate ≥ 0.95 over window N, signed events, methodology citation | block_rate ≥ 0.80, signed events, methodology citation | block_rate < 0.80 with methodology citation | no signed event log OR signed events without methodology citation |
+| Empirical block-rate | block_rate ≥ rail_baseline_block_rate + 0.15 over window N, signed events, methodology citation | block_rate ≥ rail_baseline_block_rate + 0.05, signed events, methodology citation | block_rate < rail_baseline_block_rate + 0.05, with methodology citation | no rail declaration OR no signed event log OR no methodology citation |
 | Time-to-enforce | P99 < min(typical-user-action), reproducing across two independent substrates, signed run logs | P99 < typical-task-batch-end (~5s), single-substrate measurement acceptable, signed run logs | P99 ≥ task-batch-end OR no empirical methodology cited | vendor self-claim without methodology |
 | Enforcement locus | `customer` with §5.3 preconditions verified, OR `vendor` with audit-trail-right contract published, OR `hybrid` with per-class declaration | (enum axis: no medium tier in the rubric sense; the hybrid value lands here when partial preconditions are verified) | enum value present in receipts, no precondition verification | `enforcement_locus` value not present in receipts |
 
 The structural-enforcement and enforcement-locus rows are not continuous. The tier label captures the verification evidence the vendor has published. For empirical block-rate and time-to-enforce, the rate or the percentile is the measurement; the tier captures both the value and the methodology behind it.
 
 Substrate count is the discriminator between HIGH (≥2 independent substrates) and MEDIUM (single-substrate) on the time-to-enforce row. Headline-number magnitude alone does not promote MEDIUM to HIGH.
+
+**Rail-anchored block-rate banding.** The block-rate bands are tied to the rail's declared baseline block rate, following the §1.3 rail-tied precedent. Flat fractional cutoffs do not survive cross-rail portability: the same 0.95 reads as wide headroom on a rail whose baseline posture blocks 0.40 of non-conforming actions, and as near-baseline noise on a rail whose baseline posture already blocks 0.90. The band measures headroom above the rail baseline, not the raw fraction. Dimensioning is fixed-headroom: `Δ_high = +0.15` and `Δ_medium = +0.05` above `rail_baseline_block_rate`. The Δ values are open pending working-group input; the banding structure is adopted, the dimensioning is not settled. A percentile-distance alternative (banding by where the measured rate falls in the rail's block-rate distribution) was considered and rejected for now: it is harder to make portable across vendor histograms. The low band requires a methodology citation like every other band; a measured rate below the medium band without one drops to unknown. A block-rate receipt without a rail declaration evaluates to the unknown tier (§6.1).
+
+#### 2.1.1 Rail-baseline catalogue
+
+The rail-baseline figures the bands anchor to (`rail_baseline_block_rate` here, the typical-user-action distribution in §1.3) live in a rail-baseline catalogue. The catalogue is a parallel artifact: this working text does not ship it, and adopting the banding does not wait on it. Until a shared catalogue exists, a vendor-declared baseline is acceptable if and only if the baseline derivation is itself methodology-cited: window, population, and measurement procedure published to the same standard §1.2 applies to the block-rate measurement itself. A declared baseline without that citation is not a rail declaration, and the receipt evaluates to the unknown tier.
 
 ### 2.2 Core requirement, in one sentence
 
@@ -282,6 +288,7 @@ This section gives the canonical structural skeleton of a decision receipt. It i
 ### 6.1 Canonical receipt fields
 
 - `dimension`: which of the four family dimensions the receipt supports (`structural_enforcement`, `empirical_block_rate`, `time_to_enforce`, `enforcement_locus`). Binds the receipt to one axis; a tier claim that spans multiple dimensions carries one receipt per dimension.
+- `rail`: the rail the measurement was taken on (payments, content, audit-pipeline, agent-toolkit, or another declared rail), together with the rail-baseline figures the dimension's banding anchors to: `rail_baseline_block_rate` for §1.2 block-rate receipts (§2.1), the typical-user-action distribution for §1.3 time-to-enforce receipts. A block-rate receipt without a rail declaration evaluates to the unknown tier per §2.1. Binds the tier bands to the rail they were dimensioned against.
 - `tier`: the claimed tier for that dimension (`high`, `medium`, `low`, `unknown`). Binds the claim the vendor is making.
 - `value`: the underlying measurement, where the dimension has one (the block-rate fraction for §1.2, the percentile distribution for §1.3). For the binary axis (§1.1) and the enum axis (§1.4) the value is the axis state. Binds the number or state behind the tier.
 - `methodology_citation`: a reference to the methodology that produced `value`, with the parameters required to reproduce it (for block-rate, window N and period T; for time-to-enforce, the run shape and what triggers the policy decision). Binds the tier to a reproducible procedure; a receipt without this field stays at the unknown tier per §2.2.
@@ -320,7 +327,7 @@ This section gives the protocol for adding a third or fourth reference implement
 1. Do we want the receipt shape to be canonicalized via JCS (RFC 8785), or do we leave canonicalization scheme as a per-implementation choice?
 2. §1.1's multiplier-scoping clause fixes the ×2.0 structural-axis multiplier to the enforcement-effectiveness family and defers cross-family interaction to v1.0. Still open for v1.0 rubric authors: should the multiplier vary per-dimension-family rather than stay fixed at ×2.0?
 3. For `enforcement_locus = hybrid`, is there a required minimum precondition coverage, or is the per-class declaration sufficient?
-4. The empirical block-rate tier thresholds in §2.1 (high ≥ 0.95, medium ≥ 0.80) are placeholder values. Confirmation requested from the #32 RMF authors (OWASP AIVSS #32, 2026-06-10); the v0.2 close-out is gated on the answer.
+4. Resolved in structure per the #32 RMF review: the §2.1 block-rate bands are rail-anchored (headroom above `rail_baseline_block_rate`), retiring the flat placeholder thresholds (high ≥ 0.95, medium ≥ 0.80). Still open: the fixed-headroom dimensioning (`Δ_high = +0.15`, `Δ_medium = +0.05`), pending working-group input.
 
 ---
 
