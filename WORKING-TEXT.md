@@ -1,4 +1,6 @@
-# `enforcement_effectiveness` dimension family, working text v0.1
+# `enforcement_effectiveness` dimension family, working text v0.2-draft
+
+> **v0.2-draft (2026-06-10):** substrate-resolution floor rule adopted (`floor = max(50ms, k × r)`); nobulex third-substrate reproduction published and read into §3.2; sanity-check vs tier-eligibility note landed earlier (23b99bf). Remaining for the v0.2 cut: §2.1 block-rate threshold confirmation (requested from the #32 RMF authors on OWASP AIVSS #32) and a coarse-clock or multi-process substrate where the substrate term actually binds.
 
 **Status:** v0.1 draft. Target publish 2026-05-15 per the [OWASP AIVSS #31](https://github.com/OWASP/www-project-artificial-intelligence-vulnerability-scoring-system/issues/31) cadence agreement.
 
@@ -146,7 +148,9 @@ Reference shape per run: 4 workers × 500 qps × 3 seconds = ~6,000 requests. Sa
 
 ### 3.2 What this proves
 
-Methodology portability across two independent substrates is the load-bearing claim. The in-process Map substrate (APS race-test runner) and the SQLite WAL multi-process substrate (audit-pack-signing v0.5) are different along every dimension: process model, persistence layer, concurrency primitive, network exposure. The headline numbers reproduce across both within the spec.md §12 bound (≤50ms). Two reference observations to date: audit-pack-signing v0.5 lab-bench at 0.00ms / 0 ACCEPTs over 6,000 requests (1 run, per VeloGerber's #31 May 6 post); APS race-test runner fresh-checkout at P99 4.57ms / 12 ACCEPTs over 6,004 requests (1 run, per PR#1 reproduction comment). Both observations satisfy the §12 bound. Absolute headline parity is not the claim; bound parity across substrates is.
+Methodology portability across two independent substrates is the load-bearing claim. The in-process Map substrate (APS race-test runner) and the SQLite WAL multi-process substrate (audit-pack-signing v0.5) are different along every dimension: process model, persistence layer, concurrency primitive, network exposure. The headline numbers reproduce across both within the spec.md §12 bound (≤50ms). Three reference observations to date: audit-pack-signing v0.5 lab-bench at 0.00ms / 0 ACCEPTs over 6,000 requests (1 run, per VeloGerber's #31 May 6 post); APS race-test runner fresh-checkout at P99 4.57ms / 12 ACCEPTs over 6,004 requests (1 run, per PR#1 reproduction comment); nobulex `createAuthMiddleware` at P99 0.00ms / 4 post-revoke ACCEPTs over ~6,000 requests (1 run, `race-test-fixtures/nobulex-substrate/FINDINGS.md`, source pinned to `arian-gogani/nobulex@2f44368`). All three satisfy the §12 bound. The nobulex observation shares the in-process concurrency class of substrate #2, so it is a third reading on clock resolution and bound parity, a sanity-check-shape observation rather than a fourth point on the process-model axis; codebase independence is its contribution. Absolute headline parity is not the claim; bound parity across substrates is.
+
+**Substrate-resolution floor (v0.2).** The bound is `floor = max(50ms, k × r)`, where `r` is the substrate's metric-clock resolution and `k` is the number of operations that fall within the same metric-clock tick and must be ordered at the revocation boundary. The 50ms term is the rubric floor; `k × r` is the substrate's own resolution floor, and the substrate term binds only when `k × r` exceeds 50ms. On every substrate measured to date the resolution floor stays under 50ms, so the rubric floor dominates; the substrate term is written for coarse-clock or multi-process backends where it does not, and no substrate measured so far exercises it.
 
 Bound reproduction across two substrates means the dimension measures the methodology. The substrate is incidental to the bound. A single-substrate result is open to the objection that the bound is an artifact of the chosen backend. Two substrates satisfying the same bound close that objection.
 
@@ -316,7 +320,7 @@ This section gives the protocol for adding a third or fourth reference implement
 1. Do we want the receipt shape to be canonicalized via JCS (RFC 8785), or do we leave canonicalization scheme as a per-implementation choice?
 2. §1.1's multiplier-scoping clause fixes the ×2.0 structural-axis multiplier to the enforcement-effectiveness family and defers cross-family interaction to v1.0. Still open for v1.0 rubric authors: should the multiplier vary per-dimension-family rather than stay fixed at ×2.0?
 3. For `enforcement_locus = hybrid`, is there a required minimum precondition coverage, or is the per-class declaration sufficient?
-4. The empirical block-rate tier thresholds in §2.1 (high ≥ 0.95, medium ≥ 0.80) are placeholder values. Confirm with #32 RMF authors before v0.2.
+4. The empirical block-rate tier thresholds in §2.1 (high ≥ 0.95, medium ≥ 0.80) are placeholder values. Confirmation requested from the #32 RMF authors (OWASP AIVSS #32, 2026-06-10); the v0.2 close-out is gated on the answer.
 
 ---
 
